@@ -35,7 +35,7 @@ app.post("/crear-link-pago", async (req, res) => {
     return res.status(400).json({ error: "Faltan datos requeridos (nivel o teléfono)." });
   }
 
-  const emailPagador = "test_user_1029501522@testuser.com";
+  const emailPagador = "test_user_2585027413744398944@testuser.com";
 
   console.log("👤 Payer usado:", emailPagador);
 

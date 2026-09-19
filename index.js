@@ -77,40 +77,11 @@ app.post("/crear-link-pago", async (req, res) => {
 
 // 2. RUTA WEBHOOK: MERCADO PAGO AVISA AQUÍ CUANDO SE REALIZA EL PAGO
 app.post("/webhook-mp", async (req, res) => {
-  // Manejo seguro por si req.body llega sin definir
-    console.log("🔔 WEBHOOK RECIBIDO:", JSON.stringify(req.body));
+  console.log("🔔 WEBHOOK RECIBIDO");
+  console.log(JSON.stringify(req.body, null, 2));
 
-  const { type, data } = req.body || {};
-
-  try {
-    if ((type === "subscription_preapproval" || type === "payment") && data?.id) {
-      const id = data.id;
-
-      // Consultar el estado real de la suscripción en Mercado Pago
-      const mpRes = await fetch(`https://api.mercadopago.com/preapproval/${id}`, {
-        headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
-      });
-
-      if (mpRes.ok) {
-        const suscripcion = await mpRes.json();
-
-        // Si el pago fue aprobado/autorizado
-        if (suscripcion.status === "authorized") {
-          const usuarioTelefono = suscripcion.external_reference;
-          const tituloPlan = suscripcion.reason;
-
-          let nuevoNivel = "NIVEL 0";
-          if (tituloPlan.includes("NIVEL 1")) nuevoNivel = "NIVEL 1";
-          if (tituloPlan.includes("NIVEL 2")) nuevoNivel = "NIVEL 2";
-          if (tituloPlan.includes("NIVEL 3")) nuevoNivel = "NIVEL 3";
-
-          console.log(`💳 Pago recibido. Otorgando ${nuevoNivel} a usuario: ${usuarioTelefono}`);
-
-          // Actualizar Airtable automáticamente
-          await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
-        }
-      }
-    }
+  res.sendStatus(200);
+});
 
     // Mercado Pago requiere que siempre respondamos 200 OK
     res.sendStatus(200);

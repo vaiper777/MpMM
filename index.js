@@ -3,41 +3,84 @@ const cors = require("cors");
 
 const app = express();
 
-// Permitir peticiones desde tu app web
+/* =========================================================
+   CONFIGURACIÓN Y VARIABLES DE ENTORNO
+   ========================================================= */
+
+const PORT = process.env.PORT || 3000;
+const ACCESS_TOKEN_MP = process.env.ACCESS_TOKEN_MP;
+const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
+const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET;
+
+const TABLA_REGISTRO = "REGISTRO";
+const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
+
+const PLANES = {
+  1: { titulo: "Membresía NIVEL 1", precio: 1 },
+  2: { titulo: "Membresía NIVEL 2", precio: 2 },
+  3: { titulo: "Membresía NIVEL 3", precio: 3 }
+};
+
+// Validación de configuración inicial
+const REQUIRED_ENV_VARS = [
+  { name: "ACCESS_TOKEN_MP", value: ACCESS_TOKEN_MP },
+  { name: "AIRTABLE_TOKEN", value: AIRTABLE_TOKEN },
+  { name: "AIRTABLE_BASE_ID", value: AIRTABLE_BASE_ID },
+  { name: "MP_WEBHOOK_SECRET", value: MP_WEBHOOK_SECRET }
+];
+
+REQUIRED_ENV_VARS.forEach(({ name, value }) => {
+  if (!value) console.warn(`⚠️ Advertencia: Falta la variable de entorno ${name}`);
+});
+
+/* =========================================================
+   MIDDLEWARES
+   ========================================================= */
+
 app.use(cors());
 app.use(express.json());
 
-// Claves de configuración
-const ACCESS_TOKEN_MP = "APP_USR-6205728868317147-091912-afff033a137054490384517b1c446838-3699900550";
-const AIRTABLE_TOKEN = "pattnrYUBwzOfZadM.564e331fab1fac9fd68ea5d31bdb6991f9e6f7537f65bd75558ad849dccbac69";
-const AIRTABLE_BASE_ID = "app2S4wHymS877hSG";
-const TABLA_REGISTRO = "REGISTRO";
+/* =========================================================
+   RUTAS PRINCIPALES & HEALTH CHECK
+   ========================================================= */
 
-// Precios y títulos según el nivel de membresía
-const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 10000 },
-  2: { titulo: "Membresía NIVEL 2", precio: 15000 },
-  3: { titulo: "Membresía NIVEL 3", precio: 20000 }
-};
-
-// Ruta de prueba para verificar que el servidor está encendido
 app.get("/", (req, res) => {
   res.send("🚀 Servidor de Membresías funcionando correctamente.");
 });
 
-// 1. RUTA PARA CREAR EL LINK DE PAGO EN MERCADO PAGO
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    servidor: "mpmm",
+    entorno: "produccion"
+  });
+});
+
+/* =========================================================
+   RUTAS DE MERCADO PAGO
+   ========================================================= */
+
+/**
+ * Crear enlace/suscripción de pago recurrente en Mercado Pago
+ */
 app.post("/crear-link-pago", async (req, res) => {
-  console.log("💰 CREANDO LINK DE PAGO", req.body);
+  console.log("💰 CREANDO SUSCRIPCIÓN");
+  console.log("📦 Datos recibidos:", req.body);
+
   const { nivel, usuarioTelefono, email } = req.body;
   const planInfo = PLANES[nivel];
 
-  if (!planInfo || !usuarioTelefono) {
-    return res.status(400).json({ error: "Faltan datos requeridos (nivel o teléfono)." });
+  // Validaciones de entrada
+  if (!planInfo) {
+    return res.status(400).json({ error: "Nivel de membresía inválido." });
   }
-
-  const emailPagador = "test_user_3146184926779850939@testuser.com";
-
-  console.log("👤 Payer usado:", emailPagador);
+  if (!usuarioTelefono) {
+    return res.status(400).json({ error: "Falta el teléfono del usuario." });
+  }
+  if (!email) {
+    return res.status(400).json({ error: "Falta el email del usuario." });
+  }
 
   try {
     const response = await fetch("https://api.mercadopago.com/preapproval", {
@@ -48,8 +91,8 @@ app.post("/crear-link-pago", async (req, res) => {
       },
       body: JSON.stringify({
         reason: planInfo.titulo,
-        payer_email: emailPagador,
-        external_reference: usuarioTelefono,
+        payer_email: email,
+        external_reference: String(usuarioTelefono),
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
@@ -57,100 +100,190 @@ app.post("/crear-link-pago", async (req, res) => {
           currency_id: "ARS"
         },
         back_url: "https://mmseguridad-c630f.web.app/MenuLateral.html",
-        notification_url: "https://mpmm.onrender.com/webhook-mp"
+        notification_url: WEBHOOK_URL
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Error Mercado Pago:", data);
-      throw new Error(data.message || "No se pudo generar el pago.");
+      console.error("❌ Error Mercado Pago:", JSON.stringify(data, null, 2));
+      return res.status(response.status).json({
+        error: data.message || "No se pudo crear la suscripción."
+      });
     }
+
     console.log("🆔 Preapproval creado:", data.id);
-    res.json({ init_point: data.sandbox_init_point || data.init_point });
+    console.log("📌 Estado inicial:", data.status);
+
+    return res.json({
+      init_point: data.init_point,
+      id: data.id
+    });
   } catch (err) {
-    console.error("Error en /crear-link-pago:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("❌ Error en /crear-link-pago:", err);
+    return res.status(500).json({
+      error: "Error interno al crear la suscripción."
+    });
   }
 });
 
-// 2. RUTA WEBHOOK: MERCADO PAGO AVISA AQUÍ CUANDO SE REALIZA EL PAGO
+/**
+ * Webhook para recibir notificaciones de eventos de Mercado Pago
+ */
 app.post("/webhook-mp", async (req, res) => {
   console.log("🔔 WEBHOOK RECIBIDO");
   console.log(JSON.stringify(req.body, null, 2));
 
+  // Confirmar recepción inmediatamente a Mercado Pago
   res.sendStatus(200);
+
+  try {
+    const body = req.body || {};
+    const { type, data } = body;
+
+    if (type !== "subscription_preapproval" || !data?.id) {
+      console.log("ℹ️ Evento ignorado:", type);
+      return;
+    }
+
+    const preapprovalId = data.id;
+    console.log("🔎 Consultando suscripción:", preapprovalId);
+
+    // Consultar estado actualizado directo a la API de MP
+    const mpRes = await fetch(
+      `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+      {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
+      }
+    );
+
+    const suscripcion = await mpRes.json();
+
+    if (!mpRes.ok) {
+      console.error("❌ Error consultando preapproval:", JSON.stringify(suscripcion, null, 2));
+      return;
+    }
+
+    console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
+
+    if (suscripcion.status !== "authorized") {
+      console.log("ℹ️ Suscripción todavía no autorizada:", suscripcion.status);
+      return;
+    }
+
+    const usuarioTelefono = suscripcion.external_reference;
+    const tituloPlan = suscripcion.reason || "";
+
+    if (!usuarioTelefono) {
+      console.error("❌ La suscripción no tiene external_reference.");
+      return;
+    }
+
+    // Determinar nivel contratado
+    const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+    const nuevoNivel = matchNivel ? matchNivel[0] : null;
+
+    if (!nuevoNivel) {
+      console.error("❌ No se pudo determinar el nivel:", tituloPlan);
+      return;
+    }
+
+    console.log(`💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`);
+
+    // Actualizar base de datos
+    await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+  } catch (err) {
+    console.error("❌ Error procesando webhook:", err);
+  }
 });
 
-
-
-
-
-
+/**
+ * Consultar estado de una suscripción manualmente por ID
+ */
 app.get("/estado-preapproval/:id", async (req, res) => {
   try {
-    const response = await fetch(`https://api.mercadopago.com/preapproval/${req.params.id}`, {
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
-    });
+    const response = await fetch(
+      `https://api.mercadopago.com/preapproval/${req.params.id}`,
+      {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
+      }
+    );
+
     const data = await response.json();
-    res.json(data);
+    return res.status(response.status).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("❌ Error consultando preapproval:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
+/* =========================================================
+   SERVICIOS AUXILIARES (AIRTABLE)
+   ========================================================= */
 
-
-
-
-
-app.get("/test-token", async (req, res) => {
-  try {
-    const response = await fetch("https://api.mercadopago.com/users/me", {
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
-    });
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-
-// Función para actualizar el campo MEMBRESIA en Airtable
+/**
+ * Actualiza la membresía de un usuario en Airtable buscando por teléfono
+ */
 async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
-  const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
-  const buscarUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
+  try {
+    console.log(`🔎 Buscando usuario en Airtable: ${telefono}`);
 
-  const res = await fetch(buscarUrl, {
-    headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
-  });
-  const data = await res.json();
+    const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
+    const buscarUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
 
-  if (data.records && data.records.length > 0) {
+    const buscarRes = await fetch(buscarUrl, {
+      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
+    });
+
+    const data = await buscarRes.json();
+
+    if (!buscarRes.ok) {
+      console.error("❌ Error buscando usuario en Airtable:", JSON.stringify(data, null, 2));
+      return;
+    }
+
+    if (!data.records || data.records.length === 0) {
+      console.warn(`⚠️ No se encontró usuario con teléfono ${telefono}`);
+      return;
+    }
+
     const recordId = data.records[0].id;
+    console.log("🆔 Registro Airtable encontrado:", recordId);
+
     const updateUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}/${recordId}`;
 
-    await fetch(updateUrl, {
+    const updateRes = await fetch(updateUrl, {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${AIRTABLE_TOKEN}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        fields: { MEMBRESIA: [nuevoNivel] }
+        fields: {
+          MEMBRESIA: [nuevoNivel]
+        }
       })
     });
-    console.log(`✅ Airtable actualizado: Usuario ${telefono} ahora tiene ${nuevoNivel}`);
-  } else {
-    console.warn(`⚠️ No se encontró ningún usuario registrado con el teléfono: ${telefono}`);
+
+    const updateData = await updateRes.json();
+
+    if (!updateRes.ok) {
+      console.error("❌ Error actualizando Airtable:", JSON.stringify(updateData, null, 2));
+      return;
+    }
+
+    console.log(`✅ AIRTABLE ACTUALIZADO | 👤 Usuario: ${telefono} | ⭐ Membresía: ${nuevoNivel}`);
+  } catch (err) {
+    console.error("❌ Error Airtable:", err);
   }
 }
 
-// Iniciar servidor en el puerto 3000
-const PORT = process.env.PORT || 3000;
+/* =========================================================
+   INICIALIZACIÓN DEL SERVIDOR
+   ========================================================= */
+
 app.listen(PORT, () => {
-  console.log(`✅ Servidor escuchando en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
+  console.log("🌎 Entorno: PRODUCCIÓN");
 });

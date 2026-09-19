@@ -67,7 +67,7 @@ app.post("/crear-link-pago", async (req, res) => {
       console.error("Error Mercado Pago:", data);
       throw new Error(data.message || "No se pudo generar el pago.");
     }
-
+    console.log("🆔 Preapproval creado:", data.id);
     res.json({ init_point: data.sandbox_init_point || data.init_point });
   } catch (err) {
     console.error("Error en /crear-link-pago:", err.message);

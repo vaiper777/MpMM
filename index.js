@@ -66,21 +66,70 @@ app.post("/crear-link-pago", async (req, res) => {
   console.log("💰 CREANDO SUSCRIPCIÓN");
   console.log("📦 Datos recibidos:", req.body);
 
-  const { nivel, usuarioTelefono, email } = req.body;
+  const { nivel, usuarioTelefono } = req.body;
   const planInfo = PLANES[nivel];
 
-  // Validaciones de entrada
+  // Validar nivel
   if (!planInfo) {
-    return res.status(400).json({ error: "Nivel de membresía inválido." });
+    return res.status(400).json({
+      error: "Nivel de membresía inválido."
+    });
   }
+
+  // Validar teléfono
   if (!usuarioTelefono) {
-    return res.status(400).json({ error: "Falta el teléfono del usuario." });
-  }
-  if (!email) {
-    return res.status(400).json({ error: "Falta el email del usuario." });
+    return res.status(400).json({
+      error: "Falta el teléfono del usuario."
+    });
   }
 
   try {
+    // =====================================================
+    // BUSCAR USUARIO EN REGISTRO POR TELÉFONO
+    // =====================================================
+    const formula = encodeURIComponent(`{Telefono}='${usuarioTelefono}'`);
+    const buscarUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
+
+    const buscarRes = await fetch(buscarUrl, {
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_TOKEN}`
+      }
+    });
+
+    const registro = await buscarRes.json();
+
+    if (!buscarRes.ok) {
+      console.error("❌ Error consultando REGISTRO:", JSON.stringify(registro, null, 2));
+      return res.status(500).json({
+        error: "No se pudo consultar el usuario en REGISTRO."
+      });
+    }
+
+    if (!registro.records || registro.records.length === 0) {
+      console.warn(`⚠️ No se encontró usuario con teléfono: ${usuarioTelefono}`);
+      return res.status(404).json({
+        error: "No se encontró el usuario en REGISTRO."
+      });
+    }
+
+    // =====================================================
+    // OBTENER EMAIL DESDE REGISTRO
+    // =====================================================
+    const usuario = registro.records[0];
+    const emailUsuario = usuario.fields.Email;
+
+    if (!emailUsuario) {
+      console.warn(`⚠️ El usuario ${usuarioTelefono} no tiene Email registrado.`);
+      return res.status(400).json({
+        error: "El usuario no tiene un email registrado."
+      });
+    }
+
+    console.log(`📧 Email obtenido de REGISTRO: ${emailUsuario}`);
+
+    // =====================================================
+    // CREAR SUSCRIPCIÓN EN MERCADO PAGO
+    // =====================================================
     const response = await fetch("https://api.mercadopago.com/preapproval", {
       method: "POST",
       headers: {
@@ -89,7 +138,9 @@ app.post("/crear-link-pago", async (req, res) => {
       },
       body: JSON.stringify({
         reason: planInfo.titulo,
-        payer_email: email,
+        // Email obtenido directamente desde Airtable
+        payer_email: emailUsuario,
+        // Teléfono utilizado como referencia del usuario
         external_reference: String(usuarioTelefono),
         auto_recurring: {
           frequency: 1,
@@ -113,11 +164,15 @@ app.post("/crear-link-pago", async (req, res) => {
 
     console.log("🆔 Preapproval creado:", data.id);
     console.log("📌 Estado inicial:", data.status);
+    console.log(`👤 Usuario: ${usuarioTelefono}`);
+    console.log(`📧 Payer: ${emailUsuario}`);
+    console.log(`⭐ Plan: ${planInfo.titulo}`);
 
     return res.json({
       init_point: data.init_point,
       id: data.id
     });
+
   } catch (err) {
     console.error("❌ Error en /crear-link-pago:", err);
     return res.status(500).json({

@@ -3,7 +3,7 @@ const cors = require("cors");
 
 const app = express();
 
-// Permitir peticiones desde tu app web
+// Permitir peticiones desde tu app web.
 app.use(cors());
 app.use(express.json());
 

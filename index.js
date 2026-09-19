@@ -11,7 +11,6 @@ const PORT = process.env.PORT || 3000;
 const ACCESS_TOKEN_MP = process.env.ACCESS_TOKEN_MP;
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
-const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET;
 
 const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";

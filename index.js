@@ -35,7 +35,7 @@ app.post("/crear-link-pago", async (req, res) => {
   }
 
   // Si envías un email desde el frontend se usa ese; si no, coloca tu correo de prueba de Sandbox
-  const emailPagador = email || "test_user_3146184926779850939@testuser.com";
+  const emailPagador = "test_user_3146184926779850939@testuser.com";
 
   try {
     const response = await fetch("https://api.mercadopago.com/preapproval", {

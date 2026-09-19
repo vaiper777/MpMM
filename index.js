@@ -25,7 +25,7 @@ app.get("/", (req, res) => {
   res.send("🚀 Servidor de Membresías funcionando correctamente.");
 });
 
-// 1. RUTA PARA CREAR EL LINK DE PAGO EN MERCADO PAGO.
+// 1. RUTA PARA CREAR EL LINK DE PAGO EN MERCADO PAGO
 app.post("/crear-link-pago", async (req, res) => {
   const { nivel, usuarioTelefono, email } = req.body;
   const planInfo = PLANES[nivel];
@@ -137,7 +137,7 @@ async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        fields: { MEMBRESIA: nuevoNivel }
+        fields: { MEMBRESIA: [nuevoNivel] }
       })
     });
     console.log(`✅ Airtable actualizado: Usuario ${telefono} ahora tiene ${nuevoNivel}`);

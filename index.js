@@ -27,6 +27,7 @@ app.get("/", (req, res) => {
 
 // 1. RUTA PARA CREAR EL LINK DE PAGO EN MERCADO PAGO
 app.post("/crear-link-pago", async (req, res) => {
+  console.log("💰 CREANDO LINK DE PAGO", req.body);
   const { nivel, usuarioTelefono, email } = req.body;
   const planInfo = PLANES[nivel];
 

@@ -195,57 +195,219 @@ app.post("/webhook-mp", async (req, res) => {
     const body = req.body || {};
     const { type, data } = body;
 
-    if (type !== "subscription_preapproval" || !data?.id) {
-      console.log("ℹ️ Evento ignorado:", type);
-      return;
-    }
+    // =========================================================
+    // 1. CAMBIOS EN LA SUSCRIPCIÓN
+    // =========================================================
+    if (type === "subscription_preapproval") {
 
-    const preapprovalId = data.id;
-    console.log("🔎 Consultando suscripción:", preapprovalId);
-
-    // Consultar estado actualizado directo a la API de MP
-    const mpRes = await fetch(
-      `https://api.mercadopago.com/preapproval/${preapprovalId}`,
-      {
-        headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
+      if (!data?.id) {
+        console.log("⚠️ Webhook sin ID de suscripción.");
+        return;
       }
-    );
 
-    const suscripcion = await mpRes.json();
+      const preapprovalId = data.id;
+      console.log("🔎 Consultando suscripción:", preapprovalId);
 
-    if (!mpRes.ok) {
-      console.error("❌ Error consultando preapproval:", JSON.stringify(suscripcion, null, 2));
+      const mpRes = await fetch(
+        `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN_MP}`
+          }
+        }
+      );
+
+      const suscripcion = await mpRes.json();
+
+      if (!mpRes.ok) {
+        console.error(
+          "❌ Error consultando preapproval:",
+          JSON.stringify(suscripcion, null, 2)
+        );
+        return;
+      }
+
+      console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
+
+      const usuarioTelefono = suscripcion.external_reference;
+
+      if (!usuarioTelefono) {
+        console.error("❌ La suscripción no tiene external_reference.");
+        return;
+      }
+
+      console.log("👤 Usuario:", usuarioTelefono);
+
+      // =======================================================
+      // SUSCRIPCIÓN CANCELADA
+      // =======================================================
+      if (suscripcion.status === "cancelled") {
+        console.log("❌ SUSCRIPCIÓN CANCELADA:", usuarioTelefono);
+
+        await actualizarMembresiaEnAirtable(usuarioTelefono, "NIVEL 0");
+
+        console.log("🔻 Membresía cambiada a NIVEL 0");
+        return;
+      }
+
+      // =======================================================
+      // SUSCRIPCIÓN AUTORIZADA
+      // =======================================================
+      if (suscripcion.status === "authorized") {
+        const tituloPlan = suscripcion.reason || "";
+        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+        const nuevoNivel = matchNivel ? matchNivel[0] : null;
+
+        if (!nuevoNivel) {
+          console.error("❌ No se pudo determinar el nivel:", tituloPlan);
+          return;
+        }
+
+        console.log(
+          `💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`
+        );
+
+        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+
+        console.log(`✅ Membresía actualizada a ${nuevoNivel}`);
+        return;
+      }
+
+      // =======================================================
+      // OTROS ESTADOS
+      // =======================================================
+      console.log("ℹ️ Estado de suscripción:", suscripcion.status);
       return;
     }
 
-    console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
+    // =========================================================
+    // 2. PAGOS RECURRENTES
+    // =========================================================
+    if (type === "subscription_authorized_payment") {
 
-    if (suscripcion.status !== "authorized") {
-      console.log("ℹ️ Suscripción todavía no autorizada:", suscripcion.status);
+      if (!data?.id) {
+        console.log("⚠️ Pago recurrente sin ID.");
+        return;
+      }
+
+      const pagoId = data.id;
+      console.log("💳 Pago recurrente recibido:", pagoId);
+
+      // Consultar información del pago recurrente
+      const pagoRes = await fetch(
+        `https://api.mercadopago.com/authorized_payments/${pagoId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN_MP}`
+          }
+        }
+      );
+
+      const pago = await pagoRes.json();
+
+      if (!pagoRes.ok) {
+        console.error(
+          "❌ Error consultando pago recurrente:",
+          JSON.stringify(pago, null, 2)
+        );
+        return;
+      }
+
+      console.log("📋 Pago recurrente:", JSON.stringify(pago, null, 2));
+
+      // -------------------------------------------------------
+      // IMPORTANTE:
+      // El pago recurrente puede traer el ID de la suscripción.
+      // -------------------------------------------------------
+      const preapprovalId = pago.preapproval_id || pago.subscription_id;
+
+      if (!preapprovalId) {
+        console.log("⚠️ No se encontró ID de suscripción en el pago.");
+        return;
+      }
+
+      console.log("🔎 Consultando suscripción relacionada:", preapprovalId);
+
+      // Consultamos la suscripción para obtener:
+      // - external_reference
+      // - reason
+      // - status
+      const suscripcionRes = await fetch(
+        `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN_MP}`
+          }
+        }
+      );
+
+      const suscripcion = await suscripcionRes.json();
+
+      if (!suscripcionRes.ok) {
+        console.error(
+          "❌ Error consultando suscripción:",
+          JSON.stringify(suscripcion, null, 2)
+        );
+        return;
+      }
+
+      const usuarioTelefono = suscripcion.external_reference;
+
+      if (!usuarioTelefono) {
+        console.error("❌ La suscripción no tiene external_reference.");
+        return;
+      }
+
+      console.log("👤 Usuario relacionado:", usuarioTelefono);
+
+      // =======================================================
+      // PAGO APROBADO
+      // =======================================================
+      if (pago.status === "processed" || pago.status === "approved") {
+        const tituloPlan = suscripcion.reason || "";
+        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+        const nuevoNivel = matchNivel ? matchNivel[0] : null;
+
+        if (!nuevoNivel) {
+          console.error("❌ No se pudo determinar el nivel del plan.");
+          return;
+        }
+
+        console.log(
+          `✅ PAGO RECURRENTE APROBADO | 👤 ${usuarioTelefono} | ⭐ ${nuevoNivel}`
+        );
+
+        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+
+        console.log("✅ Membresía mantenida/actualizada.");
+        return;
+      }
+
+      // =======================================================
+      // PAGO RECHAZADO / EN REINTENTO
+      // =======================================================
+      if (pago.status === "recycling" || pago.status === "pending") {
+        console.log(
+          `⚠️ Pago rechazado o pendiente | Usuario: ${usuarioTelefono} | Estado: ${pago.status}`
+        );
+        console.log(
+          "⏳ NO se baja la membresía todavía. Mercado Pago puede reintentar el cobro."
+        );
+        return;
+      }
+
+      // =======================================================
+      // OTROS ESTADOS
+      // =======================================================
+      console.log("ℹ️ Estado del pago recurrente:", pago.status);
       return;
     }
 
-    const usuarioTelefono = suscripcion.external_reference;
-    const tituloPlan = suscripcion.reason || "";
+    // =========================================================
+    // 3. EVENTO NO RELACIONADO
+    // =========================================================
+    console.log("ℹ️ Evento ignorado:", type);
 
-    if (!usuarioTelefono) {
-      console.error("❌ La suscripción no tiene external_reference.");
-      return;
-    }
-
-    // Determinar nivel contratado
-    const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
-    const nuevoNivel = matchNivel ? matchNivel[0] : null;
-
-    if (!nuevoNivel) {
-      console.error("❌ No se pudo determinar el nivel:", tituloPlan);
-      return;
-    }
-
-    console.log(`💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`);
-
-    // Actualizar base de datos
-    await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
   } catch (err) {
     console.error("❌ Error procesando webhook:", err);
   }

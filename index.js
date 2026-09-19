@@ -35,7 +35,6 @@ app.post("/crear-link-pago", async (req, res) => {
     return res.status(400).json({ error: "Faltan datos requeridos (nivel o teléfono)." });
   }
 
-  // Si envías un email desde el frontend se usa ese; si no, coloca tu correo de prueba de Sandbox
   const emailPagador = "test_user_3146184926779850939@testuser.com";
 
   try {
@@ -55,7 +54,8 @@ app.post("/crear-link-pago", async (req, res) => {
           transaction_amount: planInfo.precio,
           currency_id: "ARS"
         },
-        back_url: "https://mmseguridad-c630f.web.app/MenuLateral.html"
+        back_url: "https://mmseguridad-c630f.web.app/MenuLateral.html",
+        notification_url: "https://mpmm.onrender.com/webhook-mp"
       })
     });
 
@@ -66,7 +66,6 @@ app.post("/crear-link-pago", async (req, res) => {
       throw new Error(data.message || "No se pudo generar el pago.");
     }
 
-    // En Sandbox se recomienda devolver sandbox_init_point
     res.json({ init_point: data.sandbox_init_point || data.init_point });
   } catch (err) {
     console.error("Error en /crear-link-pago:", err.message);

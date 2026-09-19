@@ -83,14 +83,6 @@ app.post("/webhook-mp", async (req, res) => {
   res.sendStatus(200);
 });
 
-    // Mercado Pago requiere que siempre respondamos 200 OK
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("Error en /webhook-mp:", err.message);
-    res.sendStatus(500);
-  }
-});
-
 
 
 

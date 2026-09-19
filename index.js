@@ -124,6 +124,24 @@ app.post("/webhook-mp", async (req, res) => {
 
 
 
+
+app.get("/estado-preapproval/:id", async (req, res) => {
+  try {
+    const response = await fetch(`https://api.mercadopago.com/preapproval/${req.params.id}`, {
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+
+
+
 app.get("/test-token", async (req, res) => {
   try {
     const response = await fetch("https://api.mercadopago.com/users/me", {

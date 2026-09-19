@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Claves de configuración
-const ACCESS_TOKEN_MP = "APP_USR-5607234100891398-091911-42f8ed81edadeeb8de907251cc9806f1-1937953336";
+const ACCESS_TOKEN_MP = "APP_USR-6205728868317147-091912-afff033a137054490384517b1c446838-3699900550";
 const AIRTABLE_TOKEN = "pattnrYUBwzOfZadM.564e331fab1fac9fd68ea5d31bdb6991f9e6f7537f65bd75558ad849dccbac69";
 const AIRTABLE_BASE_ID = "app2S4wHymS877hSG";
 const TABLA_REGISTRO = "REGISTRO";
@@ -35,7 +35,7 @@ app.post("/crear-link-pago", async (req, res) => {
     return res.status(400).json({ error: "Faltan datos requeridos (nivel o teléfono)." });
   }
 
-  const emailPagador = "test_user_2585027413744398944@testuser.com";
+  const emailPagador = "test_user_3146184926779850939@testuser.com";
 
   console.log("👤 Payer usado:", emailPagador);
 

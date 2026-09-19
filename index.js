@@ -3,7 +3,7 @@ const cors = require("cors");
 
 const app = express();
 
-// Permitir peticiones desde tu app web.
+// Permitir peticiones desde tu app web
 app.use(cors());
 app.use(express.json());
 
@@ -76,6 +76,8 @@ app.post("/crear-link-pago", async (req, res) => {
 // 2. RUTA WEBHOOK: MERCADO PAGO AVISA AQUÍ CUANDO SE REALIZA EL PAGO
 app.post("/webhook-mp", async (req, res) => {
   // Manejo seguro por si req.body llega sin definir
+    console.log("🔔 WEBHOOK RECIBIDO:", JSON.stringify(req.body));
+
   const { type, data } = req.body || {};
 
   try {

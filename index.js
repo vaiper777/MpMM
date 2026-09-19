@@ -10,23 +10,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ACCESS_TOKEN_MP = process.env.ACCESS_TOKEN_MP;
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID; 
 
 const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
 
 const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 1 },
-  2: { titulo: "Membresía NIVEL 2", precio: 2 },
-  3: { titulo: "Membresía NIVEL 3", precio: 3 }
+  1: { titulo: "Membresía NIVEL 1", precio: 10000 },
+  2: { titulo: "Membresía NIVEL 2", precio: 15000 },
+  3: { titulo: "Membresía NIVEL 3", precio: 20000 }
 };
 
 // Validación de configuración inicial
 const REQUIRED_ENV_VARS = [
   { name: "ACCESS_TOKEN_MP", value: ACCESS_TOKEN_MP },
   { name: "AIRTABLE_TOKEN", value: AIRTABLE_TOKEN },
-  { name: "AIRTABLE_BASE_ID", value: AIRTABLE_BASE_ID },
-  { name: "MP_WEBHOOK_SECRET", value: MP_WEBHOOK_SECRET }
+  { name: "AIRTABLE_BASE_ID", value: AIRTABLE_BASE_ID } 
 ];
 
 REQUIRED_ENV_VARS.forEach(({ name, value }) => {

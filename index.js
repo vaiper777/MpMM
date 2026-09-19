@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Claves de configuración
-const ACCESS_TOKEN_MP = "TEST-6135692971827029-050919-712d916e711408bedfe1837e682487a5-20475019";
+const ACCESS_TOKEN_MP = "APP_USR-7592277385934839-091901-c0a938f1815ad9e47a72f267db760f45-3699900550";
 const AIRTABLE_TOKEN = "pattnrYUBwzOfZadM.564e331fab1fac9fd68ea5d31bdb6991f9e6f7537f65bd75558ad849dccbac69";
 const AIRTABLE_BASE_ID = "app2S4wHymS877hSG";
 const TABLA_REGISTRO = "REGISTRO";
@@ -36,6 +36,8 @@ app.post("/crear-link-pago", async (req, res) => {
   }
 
   const emailPagador = "test_user_3146184926779850939@testuser.com";
+
+  console.log("👤 Payer usado:", emailPagador);
 
   try {
     const response = await fetch("https://api.mercadopago.com/preapproval", {
@@ -117,6 +119,24 @@ app.post("/webhook-mp", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+
+
+
+
+app.get("/test-token", async (req, res) => {
+  try {
+    const response = await fetch("https://api.mercadopago.com/users/me", {
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 
 // Función para actualizar el campo MEMBRESIA en Airtable
 async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {

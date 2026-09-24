@@ -16,8 +16,8 @@ const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
 
 const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 15 },
-  2: { titulo: "Membresía NIVEL 2", precio: 20 },
+  1: { titulo: "Membresía NIVEL 1", precio: 20 },
+  2: { titulo: "Membresía NIVEL 2", precio: 25 },
   3: { titulo: "Membresía NIVEL 3", precio: 30 }
 };
 
@@ -115,8 +115,24 @@ app.post("/crear-link-pago", async (req, res) => {
     // =====================================================
     // OBTENER EMAIL DESDE REGISTRO
     // =====================================================
-    const usuario = registro.records[0];
-    const emailUsuario = usuario.fields.Email;
+     const usuario = registro.records[0];
+     const emailUsuario = usuario.fields.Email;
+
+// =====================================================
+// PROMOCIÓN
+// =====================================================
+const promocionActual = Number(usuario.fields.PROMOCION || 0);
+
+const precioNormal = planInfo.precio;
+
+const precioCobro =
+  promocionActual < 3
+    ? Number((precioNormal * 0.75).toFixed(2))
+    : precioNormal;
+
+console.log(`🎁 Promoción actual: ${promocionActual}/3`);
+console.log(`💰 Precio normal: ${precioNormal}`);
+console.log(`💰 Precio de este cobro: ${precioCobro}`);
 
     if (!emailUsuario) {
       console.warn(`⚠️ El usuario ${usuarioTelefono} no tiene Email registrado.`);
@@ -145,7 +161,7 @@ app.post("/crear-link-pago", async (req, res) => {
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
-          transaction_amount: planInfo.precio,
+          transaction_amount: precioCobro,
           currency_id: "ARS"
         },
         back_url: "https://mmseguridad-c630f.web.app/MenuLateral.html",

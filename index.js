@@ -197,6 +197,67 @@ console.log(`💰 Precio de este cobro: ${precioCobro}`);
   }
 });
 
+
+
+
+async function actualizarPromocionEnAirtable(telefono) {
+  const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
+
+  const buscarUrl =
+    `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}` +
+    `?filterByFormula=${formula}`;
+
+  const buscarRes = await fetch(buscarUrl, {
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`
+    }
+  });
+
+  const registro = await buscarRes.json();
+
+  if (!buscarRes.ok) {
+    throw new Error(
+      `Error consultando PROMOCION: ${JSON.stringify(registro)}`
+    );
+  }
+
+  if (!registro.records || registro.records.length === 0) {
+    throw new Error(`No se encontró usuario: ${telefono}`);
+  }
+
+  const usuario = registro.records[0];
+
+  const promocionActual = Number(usuario.fields.PROMOCION || 0);
+
+  const nuevaPromocion = Math.min(promocionActual + 1, 3);
+
+  await fetch(
+    `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}/${usuario.id}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fields: {
+          PROMOCION: String(nuevaPromocion)
+        }
+      })
+    }
+  );
+
+  console.log(
+    `🎁 PROMOCION actualizada: ${promocionActual} → ${nuevaPromocion}`
+  );
+
+  return {
+    promocionAnterior: promocionActual,
+    promocionNueva: nuevaPromocion
+  };
+}
+
+
 /**
  * Webhook para recibir notificaciones de eventos de Mercado Pago
  */
@@ -393,10 +454,21 @@ app.post("/webhook-mp", async (req, res) => {
           `✅ PAGO RECURRENTE APROBADO | 👤 ${usuarioTelefono} | ⭐ ${nuevoNivel}`
         );
 
-        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+         await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
 
-        console.log("✅ Membresía mantenida/actualizada.");
-        return;
+console.log("✅ Membresía mantenida/actualizada.");
+
+// =======================================================
+// ACTUALIZAR CONTADOR DE PROMOCIÓN
+// =======================================================
+const resultadoPromocion =
+  await actualizarPromocionEnAirtable(usuarioTelefono);
+
+console.log(
+  `🎁 Promoción: ${resultadoPromocion.promocionAnterior} → ${resultadoPromocion.promocionNueva}`
+);
+
+return;
       }
 
       // =======================================================

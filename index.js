@@ -265,7 +265,9 @@ app.post("/webhook-mp", async (req, res) => {
   console.log("🔔 WEBHOOK RECIBIDO");
   console.log(JSON.stringify(req.body, null, 2));
 
-  // Confirmar recepción inmediatamente a Mercado Pago
+  // =========================================================
+  // CONFIRMAR RECEPCIÓN INMEDIATAMENTE A MERCADO PAGO
+  // =========================================================
   res.sendStatus(200);
 
   try {
@@ -283,7 +285,11 @@ app.post("/webhook-mp", async (req, res) => {
       }
 
       const preapprovalId = data.id;
-      console.log("🔎 Consultando suscripción:", preapprovalId);
+
+      console.log(
+        "🔎 Consultando suscripción:",
+        preapprovalId
+      );
 
       const mpRes = await fetch(
         `https://api.mercadopago.com/preapproval/${preapprovalId}`,
@@ -304,26 +310,45 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
-      console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
+      console.log(
+        "📋 Suscripción:",
+        JSON.stringify(suscripcion, null, 2)
+      );
 
-      const usuarioTelefono = suscripcion.external_reference;
+      const usuarioTelefono =
+        suscripcion.external_reference;
 
       if (!usuarioTelefono) {
-        console.error("❌ La suscripción no tiene external_reference.");
+        console.error(
+          "❌ La suscripción no tiene external_reference."
+        );
         return;
       }
 
-      console.log("👤 Usuario:", usuarioTelefono);
+      console.log(
+        "👤 Usuario:",
+        usuarioTelefono
+      );
 
       // =======================================================
       // SUSCRIPCIÓN CANCELADA
       // =======================================================
       if (suscripcion.status === "cancelled") {
-        console.log("❌ SUSCRIPCIÓN CANCELADA:", usuarioTelefono);
 
-        await actualizarMembresiaEnAirtable(usuarioTelefono, "NIVEL 0");
+        console.log(
+          "❌ SUSCRIPCIÓN CANCELADA:",
+          usuarioTelefono
+        );
 
-        console.log("🔻 Membresía cambiada a NIVEL 0");
+        await actualizarMembresiaEnAirtable(
+          usuarioTelefono,
+          "NIVEL 0"
+        );
+
+        console.log(
+          "🔻 Membresía cambiada a NIVEL 0"
+        );
+
         return;
       }
 
@@ -331,12 +356,21 @@ app.post("/webhook-mp", async (req, res) => {
       // SUSCRIPCIÓN AUTORIZADA
       // =======================================================
       if (suscripcion.status === "authorized") {
-        const tituloPlan = suscripcion.reason || "";
-        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
-        const nuevoNivel = matchNivel ? matchNivel[0] : null;
+
+        const tituloPlan =
+          suscripcion.reason || "";
+
+        const matchNivel =
+          tituloPlan.match(/NIVEL [1-3]/);
+
+        const nuevoNivel =
+          matchNivel ? matchNivel[0] : null;
 
         if (!nuevoNivel) {
-          console.error("❌ No se pudo determinar el nivel:", tituloPlan);
+          console.error(
+            "❌ No se pudo determinar el nivel:",
+            tituloPlan
+          );
           return;
         }
 
@@ -344,16 +378,26 @@ app.post("/webhook-mp", async (req, res) => {
           `💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`
         );
 
-        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+        await actualizarMembresiaEnAirtable(
+          usuarioTelefono,
+          nuevoNivel
+        );
 
-        console.log(`✅ Membresía actualizada a ${nuevoNivel}`);
+        console.log(
+          `✅ Membresía actualizada a ${nuevoNivel}`
+        );
+
         return;
       }
 
       // =======================================================
       // OTROS ESTADOS
       // =======================================================
-      console.log("ℹ️ Estado de suscripción:", suscripcion.status);
+      console.log(
+        "ℹ️ Estado de suscripción:",
+        suscripcion.status
+      );
+
       return;
     }
 
@@ -363,14 +407,22 @@ app.post("/webhook-mp", async (req, res) => {
     if (type === "subscription_authorized_payment") {
 
       if (!data?.id) {
-        console.log("⚠️ Pago recurrente sin ID.");
+        console.log(
+          "⚠️ Pago recurrente sin ID."
+        );
         return;
       }
 
       const pagoId = data.id;
-      console.log("💳 Pago recurrente recibido:", pagoId);
 
-      // Consultar información del pago recurrente
+      console.log(
+        "💳 Pago recurrente recibido:",
+        pagoId
+      );
+
+      // =======================================================
+      // CONSULTAR INFORMACIÓN DEL PAGO
+      // =======================================================
       const pagoRes = await fetch(
         `https://api.mercadopago.com/authorized_payments/${pagoId}`,
         {
@@ -390,25 +442,33 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
-      console.log("📋 Pago recurrente:", JSON.stringify(pago, null, 2));
+      console.log(
+        "📋 Pago recurrente:",
+        JSON.stringify(pago, null, 2)
+      );
 
-      // -------------------------------------------------------
-      // IMPORTANTE:
-      // El pago recurrente puede traer el ID de la suscripción.
-      // -------------------------------------------------------
-      const preapprovalId = pago.preapproval_id || pago.subscription_id;
+      // =======================================================
+      // OBTENER ID DE SUSCRIPCIÓN
+      // =======================================================
+      const preapprovalId =
+        pago.preapproval_id ||
+        pago.subscription_id;
 
       if (!preapprovalId) {
-        console.log("⚠️ No se encontró ID de suscripción en el pago.");
+        console.log(
+          "⚠️ No se encontró ID de suscripción en el pago."
+        );
         return;
       }
 
-      console.log("🔎 Consultando suscripción relacionada:", preapprovalId);
+      console.log(
+        "🔎 Consultando suscripción relacionada:",
+        preapprovalId
+      );
 
-      // Consultamos la suscripción para obtener:
-      // - external_reference
-      // - reason
-      // - status
+      // =======================================================
+      // CONSULTAR SUSCRIPCIÓN
+      // =======================================================
       const suscripcionRes = await fetch(
         `https://api.mercadopago.com/preapproval/${preapprovalId}`,
         {
@@ -418,7 +478,8 @@ app.post("/webhook-mp", async (req, res) => {
         }
       );
 
-      const suscripcion = await suscripcionRes.json();
+      const suscripcion =
+        await suscripcionRes.json();
 
       if (!suscripcionRes.ok) {
         console.error(
@@ -428,25 +489,42 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
-      const usuarioTelefono = suscripcion.external_reference;
+      const usuarioTelefono =
+        suscripcion.external_reference;
 
       if (!usuarioTelefono) {
-        console.error("❌ La suscripción no tiene external_reference.");
+        console.error(
+          "❌ La suscripción no tiene external_reference."
+        );
         return;
       }
 
-      console.log("👤 Usuario relacionado:", usuarioTelefono);
+      console.log(
+        "👤 Usuario relacionado:",
+        usuarioTelefono
+      );
 
       // =======================================================
       // PAGO APROBADO
       // =======================================================
-      if (pago.status === "processed" || pago.status === "approved") {
-        const tituloPlan = suscripcion.reason || "";
-        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
-        const nuevoNivel = matchNivel ? matchNivel[0] : null;
+      if (
+        pago.status === "processed" ||
+        pago.status === "approved"
+      ) {
+
+        const tituloPlan =
+          suscripcion.reason || "";
+
+        const matchNivel =
+          tituloPlan.match(/NIVEL [1-3]/);
+
+        const nuevoNivel =
+          matchNivel ? matchNivel[0] : null;
 
         if (!nuevoNivel) {
-          console.error("❌ No se pudo determinar el nivel del plan.");
+          console.error(
+            "❌ No se pudo determinar el nivel del plan."
+          );
           return;
         }
 
@@ -454,50 +532,85 @@ app.post("/webhook-mp", async (req, res) => {
           `✅ PAGO RECURRENTE APROBADO | 👤 ${usuarioTelefono} | ⭐ ${nuevoNivel}`
         );
 
-         await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
+        // =====================================================
+        // ACTUALIZAR MEMBRESÍA
+        // =====================================================
+        await actualizarMembresiaEnAirtable(
+          usuarioTelefono,
+          nuevoNivel
+        );
 
-console.log("✅ Membresía mantenida/actualizada.");
+        console.log(
+          "✅ Membresía mantenida/actualizada."
+        );
 
-// =======================================================
-// ACTUALIZAR CONTADOR DE PROMOCIÓN
-// =======================================================
-const resultadoPromocion =
-  await actualizarPromocionEnAirtable(usuarioTelefono);
+        // =====================================================
+        // ACTUALIZAR CONTADOR DE PROMOCIÓN
+        // =====================================================
+        console.log(
+          "🎁 Actualizando contador PROMOCION..."
+        );
 
-console.log(
-  `🎁 Promoción: ${resultadoPromocion.promocionAnterior} → ${resultadoPromocion.promocionNueva}`
-);
+        const resultadoPromocion =
+          await actualizarPromocionEnAirtable(
+            usuarioTelefono
+          );
 
-return;
+        console.log(
+          `🎁 Promoción: ${resultadoPromocion.promocionAnterior} → ${resultadoPromocion.promocionNueva}`
+        );
+
+        console.log(
+          "✅ PROCESAMIENTO DEL PAGO FINALIZADO"
+        );
+
+        return;
       }
 
       // =======================================================
       // PAGO RECHAZADO / EN REINTENTO
       // =======================================================
-      if (pago.status === "recycling" || pago.status === "pending") {
+      if (
+        pago.status === "recycling" ||
+        pago.status === "pending"
+      ) {
+
         console.log(
           `⚠️ Pago rechazado o pendiente | Usuario: ${usuarioTelefono} | Estado: ${pago.status}`
         );
+
         console.log(
           "⏳ NO se baja la membresía todavía. Mercado Pago puede reintentar el cobro."
         );
+
         return;
       }
 
       // =======================================================
       // OTROS ESTADOS
       // =======================================================
-      console.log("ℹ️ Estado del pago recurrente:", pago.status);
+      console.log(
+        "ℹ️ Estado del pago recurrente:",
+        pago.status
+      );
+
       return;
     }
 
     // =========================================================
     // 3. EVENTO NO RELACIONADO
     // =========================================================
-    console.log("ℹ️ Evento ignorado:", type);
+    console.log(
+      "ℹ️ Evento ignorado:",
+      type
+    );
 
   } catch (err) {
-    console.error("❌ Error procesando webhook:", err);
+
+    console.error(
+      "❌ Error procesando webhook:",
+      err
+    );
   }
 });
 

@@ -16,8 +16,8 @@ const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
 
 const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 20 },
-  2: { titulo: "Membresía NIVEL 2", precio: 25 },
+  1: { titulo: "Membresía NIVEL 1", precio: 10 },
+  2: { titulo: "Membresía NIVEL 2", precio: 20 },
   3: { titulo: "Membresía NIVEL 3", precio: 30 }
 };
 
@@ -115,24 +115,8 @@ app.post("/crear-link-pago", async (req, res) => {
     // =====================================================
     // OBTENER EMAIL DESDE REGISTRO
     // =====================================================
-     const usuario = registro.records[0];
-     const emailUsuario = usuario.fields.Email;
-
-// =====================================================
-// PROMOCIÓN
-// =====================================================
-const promocionActual = Number(usuario.fields.PROMOCION || 0);
-
-const precioNormal = planInfo.precio;
-
-const precioCobro =
-  promocionActual < 3
-    ? Number((precioNormal * 0.75).toFixed(2))
-    : precioNormal;
-
-console.log(`🎁 Promoción actual: ${promocionActual}/3`);
-console.log(`💰 Precio normal: ${precioNormal}`);
-console.log(`💰 Precio de este cobro: ${precioCobro}`);
+    const usuario = registro.records[0];
+    const emailUsuario = usuario.fields.Email;
 
     if (!emailUsuario) {
       console.warn(`⚠️ El usuario ${usuarioTelefono} no tiene Email registrado.`);
@@ -161,7 +145,7 @@ console.log(`💰 Precio de este cobro: ${precioCobro}`);
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
-          transaction_amount: precioCobro,
+          transaction_amount: planInfo.precio,
           currency_id: "ARS"
         },
         back_url: "https://mmseguridad-c630f.web.app/MenuLateral.html",
@@ -197,67 +181,6 @@ console.log(`💰 Precio de este cobro: ${precioCobro}`);
   }
 });
 
-
-
-
-async function actualizarPromocionEnAirtable(telefono) {
-  const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
-
-  const buscarUrl =
-    `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}` +
-    `?filterByFormula=${formula}`;
-
-  const buscarRes = await fetch(buscarUrl, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`
-    }
-  });
-
-  const registro = await buscarRes.json();
-
-  if (!buscarRes.ok) {
-    throw new Error(
-      `Error consultando PROMOCION: ${JSON.stringify(registro)}`
-    );
-  }
-
-  if (!registro.records || registro.records.length === 0) {
-    throw new Error(`No se encontró usuario: ${telefono}`);
-  }
-
-  const usuario = registro.records[0];
-
-  const promocionActual = Number(usuario.fields.PROMOCION || 0);
-
-  const nuevaPromocion = Math.min(promocionActual + 1, 3);
-
-  await fetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}/${usuario.id}`,
-    {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        fields: {
-          PROMOCION: String(nuevaPromocion)
-        }
-      })
-    }
-  );
-
-  console.log(
-    `🎁 PROMOCION actualizada: ${promocionActual} → ${nuevaPromocion}`
-  );
-
-  return {
-    promocionAnterior: promocionActual,
-    promocionNueva: nuevaPromocion
-  };
-}
-
-
 /**
  * Webhook para recibir notificaciones de eventos de Mercado Pago
  */
@@ -265,15 +188,17 @@ app.post("/webhook-mp", async (req, res) => {
   console.log("🔔 WEBHOOK RECIBIDO");
   console.log(JSON.stringify(req.body, null, 2));
 
-  // =========================================================
-  // CONFIRMAR RECEPCIÓN INMEDIATAMENTE A MERCADO PAGO
-  // =========================================================
+  // Confirmar recepción inmediatamente a Mercado Pago
   res.sendStatus(200);
 
   try {
     const body = req.body || {};
     const { type, data } = body;
 
+    if (type !== "subscription_preapproval" || !data?.id) {
+      console.log("ℹ️ Evento ignorado:", type);
+      return;
+    }
     // =========================================================
     // 1. CAMBIOS EN LA SUSCRIPCIÓN
     // =========================================================
@@ -284,13 +209,16 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
+    const preapprovalId = data.id;
+    console.log("🔎 Consultando suscripción:", preapprovalId);
       const preapprovalId = data.id;
+      console.log("🔎 Consultando suscripción:", preapprovalId);
 
-      console.log(
-        "🔎 Consultando suscripción:",
-        preapprovalId
-      );
-
+    // Consultar estado actualizado directo a la API de MP
+    const mpRes = await fetch(
+      `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+      {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN_MP}` }
       const mpRes = await fetch(
         `https://api.mercadopago.com/preapproval/${preapprovalId}`,
         {
@@ -309,46 +237,42 @@ app.post("/webhook-mp", async (req, res) => {
         );
         return;
       }
+    );
 
-      console.log(
-        "📋 Suscripción:",
-        JSON.stringify(suscripcion, null, 2)
-      );
+    const suscripcion = await mpRes.json();
+      console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
 
-      const usuarioTelefono =
-        suscripcion.external_reference;
+    if (!mpRes.ok) {
+      console.error("❌ Error consultando preapproval:", JSON.stringify(suscripcion, null, 2));
+      return;
+    }
+      const usuarioTelefono = suscripcion.external_reference;
 
+    console.log("📋 Suscripción:", JSON.stringify(suscripcion, null, 2));
       if (!usuarioTelefono) {
-        console.error(
-          "❌ La suscripción no tiene external_reference."
-        );
+        console.error("❌ La suscripción no tiene external_reference.");
         return;
       }
 
-      console.log(
-        "👤 Usuario:",
-        usuarioTelefono
-      );
+    if (suscripcion.status !== "authorized") {
+      console.log("ℹ️ Suscripción todavía no autorizada:", suscripcion.status);
+      return;
+    }
+      console.log("👤 Usuario:", usuarioTelefono);
 
+    const usuarioTelefono = suscripcion.external_reference;
+    const tituloPlan = suscripcion.reason || "";
       // =======================================================
       // SUSCRIPCIÓN CANCELADA
       // =======================================================
       if (suscripcion.status === "cancelled") {
+        console.log("❌ SUSCRIPCIÓN CANCELADA:", usuarioTelefono);
 
-        console.log(
-          "❌ SUSCRIPCIÓN CANCELADA:",
-          usuarioTelefono
-        );
+    if (!usuarioTelefono) {
+      console.error("❌ La suscripción no tiene external_reference.");
+        await actualizarMembresiaEnAirtable(usuarioTelefono, "NIVEL 0");
 
-        await actualizarMembresiaEnAirtable(
-          usuarioTelefono,
-          "NIVEL 0"
-        );
-
-        console.log(
-          "🔻 Membresía cambiada a NIVEL 0"
-        );
-
+        console.log("🔻 Membresía cambiada a NIVEL 0");
         return;
       }
 
@@ -356,21 +280,12 @@ app.post("/webhook-mp", async (req, res) => {
       // SUSCRIPCIÓN AUTORIZADA
       // =======================================================
       if (suscripcion.status === "authorized") {
-
-        const tituloPlan =
-          suscripcion.reason || "";
-
-        const matchNivel =
-          tituloPlan.match(/NIVEL [1-3]/);
-
-        const nuevoNivel =
-          matchNivel ? matchNivel[0] : null;
+        const tituloPlan = suscripcion.reason || "";
+        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+        const nuevoNivel = matchNivel ? matchNivel[0] : null;
 
         if (!nuevoNivel) {
-          console.error(
-            "❌ No se pudo determinar el nivel:",
-            tituloPlan
-          );
+          console.error("❌ No se pudo determinar el nivel:", tituloPlan);
           return;
         }
 
@@ -378,51 +293,36 @@ app.post("/webhook-mp", async (req, res) => {
           `💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`
         );
 
-        await actualizarMembresiaEnAirtable(
-          usuarioTelefono,
-          nuevoNivel
-        );
+        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
 
-        console.log(
-          `✅ Membresía actualizada a ${nuevoNivel}`
-        );
-
+        console.log(`✅ Membresía actualizada a ${nuevoNivel}`);
         return;
       }
 
       // =======================================================
       // OTROS ESTADOS
       // =======================================================
-      console.log(
-        "ℹ️ Estado de suscripción:",
-        suscripcion.status
-      );
-
+      console.log("ℹ️ Estado de suscripción:", suscripcion.status);
       return;
     }
 
+    // Determinar nivel contratado
+    const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+    const nuevoNivel = matchNivel ? matchNivel[0] : null;
     // =========================================================
     // 2. PAGOS RECURRENTES
     // =========================================================
     if (type === "subscription_authorized_payment") {
 
       if (!data?.id) {
-        console.log(
-          "⚠️ Pago recurrente sin ID."
-        );
+        console.log("⚠️ Pago recurrente sin ID.");
         return;
       }
 
       const pagoId = data.id;
+      console.log("💳 Pago recurrente recibido:", pagoId);
 
-      console.log(
-        "💳 Pago recurrente recibido:",
-        pagoId
-      );
-
-      // =======================================================
-      // CONSULTAR INFORMACIÓN DEL PAGO
-      // =======================================================
+      // Consultar información del pago recurrente
       const pagoRes = await fetch(
         `https://api.mercadopago.com/authorized_payments/${pagoId}`,
         {
@@ -442,33 +342,25 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
-      console.log(
-        "📋 Pago recurrente:",
-        JSON.stringify(pago, null, 2)
-      );
+      console.log("📋 Pago recurrente:", JSON.stringify(pago, null, 2));
 
-      // =======================================================
-      // OBTENER ID DE SUSCRIPCIÓN
-      // =======================================================
-      const preapprovalId =
-        pago.preapproval_id ||
-        pago.subscription_id;
+      // -------------------------------------------------------
+      // IMPORTANTE:
+      // El pago recurrente puede traer el ID de la suscripción.
+      // -------------------------------------------------------
+      const preapprovalId = pago.preapproval_id || pago.subscription_id;
 
       if (!preapprovalId) {
-        console.log(
-          "⚠️ No se encontró ID de suscripción en el pago."
-        );
+        console.log("⚠️ No se encontró ID de suscripción en el pago.");
         return;
       }
 
-      console.log(
-        "🔎 Consultando suscripción relacionada:",
-        preapprovalId
-      );
+      console.log("🔎 Consultando suscripción relacionada:", preapprovalId);
 
-      // =======================================================
-      // CONSULTAR SUSCRIPCIÓN
-      // =======================================================
+      // Consultamos la suscripción para obtener:
+      // - external_reference
+      // - reason
+      // - status
       const suscripcionRes = await fetch(
         `https://api.mercadopago.com/preapproval/${preapprovalId}`,
         {
@@ -478,8 +370,7 @@ app.post("/webhook-mp", async (req, res) => {
         }
       );
 
-      const suscripcion =
-        await suscripcionRes.json();
+      const suscripcion = await suscripcionRes.json();
 
       if (!suscripcionRes.ok) {
         console.error(
@@ -489,42 +380,25 @@ app.post("/webhook-mp", async (req, res) => {
         return;
       }
 
-      const usuarioTelefono =
-        suscripcion.external_reference;
+      const usuarioTelefono = suscripcion.external_reference;
 
       if (!usuarioTelefono) {
-        console.error(
-          "❌ La suscripción no tiene external_reference."
-        );
+        console.error("❌ La suscripción no tiene external_reference.");
         return;
       }
 
-      console.log(
-        "👤 Usuario relacionado:",
-        usuarioTelefono
-      );
+      console.log("👤 Usuario relacionado:", usuarioTelefono);
 
       // =======================================================
       // PAGO APROBADO
       // =======================================================
-      if (
-        pago.status === "processed" ||
-        pago.status === "approved"
-      ) {
-
-        const tituloPlan =
-          suscripcion.reason || "";
-
-        const matchNivel =
-          tituloPlan.match(/NIVEL [1-3]/);
-
-        const nuevoNivel =
-          matchNivel ? matchNivel[0] : null;
+      if (pago.status === "processed" || pago.status === "approved") {
+        const tituloPlan = suscripcion.reason || "";
+        const matchNivel = tituloPlan.match(/NIVEL [1-3]/);
+        const nuevoNivel = matchNivel ? matchNivel[0] : null;
 
         if (!nuevoNivel) {
-          console.error(
-            "❌ No se pudo determinar el nivel del plan."
-          );
+          console.error("❌ No se pudo determinar el nivel del plan.");
           return;
         }
 
@@ -532,85 +406,44 @@ app.post("/webhook-mp", async (req, res) => {
           `✅ PAGO RECURRENTE APROBADO | 👤 ${usuarioTelefono} | ⭐ ${nuevoNivel}`
         );
 
-        // =====================================================
-        // ACTUALIZAR MEMBRESÍA
-        // =====================================================
-        await actualizarMembresiaEnAirtable(
-          usuarioTelefono,
-          nuevoNivel
-        );
+        await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
 
-        console.log(
-          "✅ Membresía mantenida/actualizada."
-        );
-
-        // =====================================================
-        // ACTUALIZAR CONTADOR DE PROMOCIÓN
-        // =====================================================
-        console.log(
-          "🎁 Actualizando contador PROMOCION..."
-        );
-
-        const resultadoPromocion =
-          await actualizarPromocionEnAirtable(
-            usuarioTelefono
-          );
-
-        console.log(
-          `🎁 Promoción: ${resultadoPromocion.promocionAnterior} → ${resultadoPromocion.promocionNueva}`
-        );
-
-        console.log(
-          "✅ PROCESAMIENTO DEL PAGO FINALIZADO"
-        );
-
+        console.log("✅ Membresía mantenida/actualizada.");
         return;
       }
 
       // =======================================================
       // PAGO RECHAZADO / EN REINTENTO
       // =======================================================
-      if (
-        pago.status === "recycling" ||
-        pago.status === "pending"
-      ) {
-
+      if (pago.status === "recycling" || pago.status === "pending") {
         console.log(
           `⚠️ Pago rechazado o pendiente | Usuario: ${usuarioTelefono} | Estado: ${pago.status}`
         );
-
         console.log(
           "⏳ NO se baja la membresía todavía. Mercado Pago puede reintentar el cobro."
         );
-
         return;
       }
 
+    if (!nuevoNivel) {
+      console.error("❌ No se pudo determinar el nivel:", tituloPlan);
       // =======================================================
       // OTROS ESTADOS
       // =======================================================
-      console.log(
-        "ℹ️ Estado del pago recurrente:",
-        pago.status
-      );
-
+      console.log("ℹ️ Estado del pago recurrente:", pago.status);
       return;
     }
 
+    console.log(`💳 Suscripción autorizada | 👤 Usuario: ${usuarioTelefono} | ⭐ Membresía: ${nuevoNivel}`);
     // =========================================================
     // 3. EVENTO NO RELACIONADO
     // =========================================================
-    console.log(
-      "ℹ️ Evento ignorado:",
-      type
-    );
+    console.log("ℹ️ Evento ignorado:", type);
 
+    // Actualizar base de datos
+    await actualizarMembresiaEnAirtable(usuarioTelefono, nuevoNivel);
   } catch (err) {
-
-    console.error(
-      "❌ Error procesando webhook:",
-      err
-    );
+    console.error("❌ Error procesando webhook:", err);
   }
 });
 
@@ -641,50 +474,33 @@ app.get("/estado-preapproval/:id", async (req, res) => {
 /**
  * Actualiza la membresía de un usuario en Airtable buscando por teléfono
  */
-
-
- 
 async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
   try {
     console.log(`🔎 Buscando usuario en Airtable: ${telefono}`);
 
     const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
-
-    const buscarUrl =
-      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/` +
-      `${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
+    const buscarUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
 
     const buscarRes = await fetch(buscarUrl, {
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`
-      }
+      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
     });
 
     const data = await buscarRes.json();
 
     if (!buscarRes.ok) {
-      console.error(
-        "❌ Error buscando usuario en Airtable:",
-        JSON.stringify(data, null, 2)
-      );
-      return false;
+      console.error("❌ Error buscando usuario en Airtable:", JSON.stringify(data, null, 2));
+      return;
     }
 
     if (!data.records || data.records.length === 0) {
-      console.warn(
-        `⚠️ No se encontró usuario con teléfono ${telefono}`
-      );
-      return false;
+      console.warn(`⚠️ No se encontró usuario con teléfono ${telefono}`);
+      return;
     }
 
     const recordId = data.records[0].id;
-
     console.log("🆔 Registro Airtable encontrado:", recordId);
-    console.log("⭐ Nuevo nivel:", nuevoNivel);
 
-    const updateUrl =
-      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/` +
-      `${encodeURIComponent(TABLA_REGISTRO)}/${recordId}`;
+    const updateUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}/${recordId}`;
 
     const updateRes = await fetch(updateUrl, {
       method: "PATCH",
@@ -701,35 +517,16 @@ async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
 
     const updateData = await updateRes.json();
 
-    console.log(
-      "📋 Respuesta Airtable:",
-      JSON.stringify(updateData, null, 2)
-    );
-
     if (!updateRes.ok) {
-      console.error(
-        "❌ ERROR ACTUALIZANDO MEMBRESIA:",
-        JSON.stringify(updateData, null, 2)
-      );
-      return false;
+      console.error("❌ Error actualizando Airtable:", JSON.stringify(updateData, null, 2));
+      return;
     }
 
-    console.log(
-      `✅ AIRTABLE ACTUALIZADO | 👤 Usuario: ${telefono} | ⭐ Membresía: ${nuevoNivel}`
-    );
-
-    return true;
-
+    console.log(`✅ AIRTABLE ACTUALIZADO | 👤 Usuario: ${telefono} | ⭐ Membresía: ${nuevoNivel}`);
   } catch (err) {
-    console.error(
-      "❌ Error Airtable:",
-      err
-    );
-
-    return false;
+    console.error("❌ Error Airtable:", err);
   }
-} 
-
+}
 
 /* =========================================================
    INICIALIZACIÓN DEL SERVIDOR

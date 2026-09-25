@@ -528,33 +528,50 @@ app.get("/estado-preapproval/:id", async (req, res) => {
 /**
  * Actualiza la membresía de un usuario en Airtable buscando por teléfono
  */
+
+
+ 
 async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
   try {
     console.log(`🔎 Buscando usuario en Airtable: ${telefono}`);
 
     const formula = encodeURIComponent(`{Telefono}='${telefono}'`);
-    const buscarUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
+
+    const buscarUrl =
+      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/` +
+      `${encodeURIComponent(TABLA_REGISTRO)}?filterByFormula=${formula}`;
 
     const buscarRes = await fetch(buscarUrl, {
-      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_TOKEN}`
+      }
     });
 
     const data = await buscarRes.json();
 
     if (!buscarRes.ok) {
-      console.error("❌ Error buscando usuario en Airtable:", JSON.stringify(data, null, 2));
-      return;
+      console.error(
+        "❌ Error buscando usuario en Airtable:",
+        JSON.stringify(data, null, 2)
+      );
+      return false;
     }
 
     if (!data.records || data.records.length === 0) {
-      console.warn(`⚠️ No se encontró usuario con teléfono ${telefono}`);
-      return;
+      console.warn(
+        `⚠️ No se encontró usuario con teléfono ${telefono}`
+      );
+      return false;
     }
 
     const recordId = data.records[0].id;
-    console.log("🆔 Registro Airtable encontrado:", recordId);
 
-    const updateUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLA_REGISTRO)}/${recordId}`;
+    console.log("🆔 Registro Airtable encontrado:", recordId);
+    console.log("⭐ Nuevo nivel:", nuevoNivel);
+
+    const updateUrl =
+      `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/` +
+      `${encodeURIComponent(TABLA_REGISTRO)}/${recordId}`;
 
     const updateRes = await fetch(updateUrl, {
       method: "PATCH",
@@ -571,16 +588,35 @@ async function actualizarMembresiaEnAirtable(telefono, nuevoNivel) {
 
     const updateData = await updateRes.json();
 
+    console.log(
+      "📋 Respuesta Airtable:",
+      JSON.stringify(updateData, null, 2)
+    );
+
     if (!updateRes.ok) {
-      console.error("❌ Error actualizando Airtable:", JSON.stringify(updateData, null, 2));
-      return;
+      console.error(
+        "❌ ERROR ACTUALIZANDO MEMBRESIA:",
+        JSON.stringify(updateData, null, 2)
+      );
+      return false;
     }
 
-    console.log(`✅ AIRTABLE ACTUALIZADO | 👤 Usuario: ${telefono} | ⭐ Membresía: ${nuevoNivel}`);
+    console.log(
+      `✅ AIRTABLE ACTUALIZADO | 👤 Usuario: ${telefono} | ⭐ Membresía: ${nuevoNivel}`
+    );
+
+    return true;
+
   } catch (err) {
-    console.error("❌ Error Airtable:", err);
+    console.error(
+      "❌ Error Airtable:",
+      err
+    );
+
+    return false;
   }
-}
+} 
+
 
 /* =========================================================
    INICIALIZACIÓN DEL SERVIDOR

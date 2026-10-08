@@ -16,9 +16,9 @@ const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
 
 const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 20 },
-  2: { titulo: "Membresía NIVEL 2", precio: 25 },
-  3: { titulo: "Membresía NIVEL 3", precio: 30 }
+  1: { titulo: "Membresía NIVEL 1", precio: 78990,  descuento: 10 },
+  2: { titulo: "Membresía NIVEL 2", precio: 105990, descuento: 15 },
+  3: { titulo: "Membresía NIVEL 3", precio: 134990, descuento: 20 }
 };
 
 const REQUIRED_ENV_VARS = [
@@ -142,9 +142,9 @@ app.post("/crear-link-pago", async (req, res) => {
     const precioNormal = planInfo.precio;
 
     const precioCobro =
-      promocionActual < 3
-        ? Number((precioNormal * 0.75).toFixed(2))
-        : precioNormal;
+  promocionActual < 3
+    ? Math.round(precioNormal * (1 - planInfo.descuento / 100))
+    : precioNormal;
 
     console.log(
       `🎁 Promoción actual: ${promocionActual}/3`

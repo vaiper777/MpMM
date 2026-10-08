@@ -16,9 +16,9 @@ const TABLA_REGISTRO = "REGISTRO";
 const WEBHOOK_URL = "https://mpmm.onrender.com/webhook-mp";
 
 const PLANES = {
-  1: { titulo: "Membresía NIVEL 1", precio: 78990,  descuento: 10 },
-  2: { titulo: "Membresía NIVEL 2", precio: 105990, descuento: 15 },
-  3: { titulo: "Membresía NIVEL 3", precio: 134990, descuento: 20 }
+  1: { titulo: "Membresía NIVEL 1", precio: 78888.89,  descuento: 10 },
+  2: { titulo: "Membresía NIVEL 2", precio: 105882.35, descuento: 15 },
+  3: { titulo: "Membresía NIVEL 3", precio: 135000, descuento: 20 }
 };
 
 const REQUIRED_ENV_VARS = [
